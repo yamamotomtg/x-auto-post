@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>X 自動投稿 管理画面</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header>
+  <h1>X 自動投稿　<small>@mtgkaitori</small></h1>
+  <div class="header-right">
+    <span id="未反映" class="badge" hidden></span>
+    <button id="反映" class="primary">GitHubへ反映</button>
+  </div>
+</header>
+
+<nav>
+  <button data-tab="予定" class="tab current">投稿予定</button>
+  <button data-tab="ルール" class="tab">お知らせ一覧</button>
+  <button id="追加" class="add">＋ 新しいお知らせ</button>
+</nav>
+
+<main>
+  <div id="お知らせ欄"></div>
+
+  <section id="予定" class="tab-page"></section>
+  <section id="ルール" class="tab-page" hidden></section>
+
+  <section id="編集" class="tab-page" hidden>
+    <ol class="steps">
+      <li data-step="1">どんなお知らせ</li>
+      <li data-step="2">いつ投稿する</li>
+      <li data-step="3">投稿する内容</li>
+      <li data-step="4">確認</li>
+    </ol>
+
+    <div class="step" data-step="1">
+      <h2>1. どんなお知らせですか</h2>
+      <label>お知らせの名前<small>（管理用の名前です。投稿はされません）</small>
+        <input id="名前" placeholder="例：メンテナンス週間のお知らせ">
+      </label>
+      <fieldset>
+        <legend>いつまで続けますか</legend>
+        <label class="choice"><input type="radio" name="種類" value="ずっと" checked>
+          <span><b>ずっと続ける</b><small>毎週の定例案内など</small></span></label>
+        <label class="choice"><input type="radio" name="種類" value="期間">
+          <span><b>期間を決める</b><small>臨時のお知らせ。期間が過ぎると自動で止まります</small></span></label>
+      </fieldset>
+      <div id="期間欄" hidden class="row">
+        <label>開始日<input type="date" id="期間開始"></label>
+        <label>終了日<input type="date" id="期間終了"></label>
+      </div>
+    </div>
+
+    <div class="step" data-step="2" hidden>
+      <h2>2. いつ投稿しますか</h2>
+      <p class="hint">朝と夜など、投稿するタイミングごとに追加してください。文章は次のページで1つずつ決めます。</p>
+      <div id="タイミング一覧"></div>
+      <button id="タイミング追加" class="sub">＋ 投稿するタイミングを追加</button>
+    </div>
+
+    <div class="step" data-step="3" hidden>
+      <h2>3. 投稿する内容</h2>
+      <div id="本文一覧"></div>
+    </div>
+
+    <div class="step" data-step="4" hidden>
+      <h2>4. この内容で登録します</h2>
+      <div id="確認"></div>
+    </div>
+
+    <div class="step-buttons">
+      <button id="やめる" class="ghost">やめる</button>
+      <span class="spacer"></span>
+      <button id="戻る" class="sub" hidden>戻る</button>
+      <button id="次へ" class="primary">次へ</button>
+      <button id="登録" class="primary" hidden>この内容で登録する</button>
+    </div>
+  </section>
+</main>
+
+<template id="タイミング雛形">
+  <div class="card timing">
+    <div class="row">
+      <label>くり返し
+        <select class="kind">
+          <option value="dow">毎週（曜日を選ぶ）</option>
+          <option value="daily">毎日</option>
+          <option value="date">日付を指定</option>
+        </select>
+      </label>
+      <label class="time">時刻<input type="time" class="time-input" value="21:00" step="300"></label>
+      <button class="ghost del">削除</button>
+    </div>
+    <div class="row dows">
+      <label><input type="checkbox" value="0">日</label>
+      <label><input type="checkbox" value="1">月</label>
+      <label><input type="checkbox" value="2">火</label>
+      <label><input type="checkbox" value="3">水</label>
+      <label><input type="checkbox" value="4">木</label>
+      <label><input type="checkbox" value="5">金</label>
+      <label><input type="checkbox" value="6">土</label>
+    </div>
+    <div class="row date-row" hidden><label>日付<input type="date" class="date-input"></label></div>
+    <div class="row">
+      <label>この投稿は、いつのことを伝えますか
+        <select class="target">
+          <option value="当日">その日のこと（本日は…）</option>
+          <option value="翌日">翌日のこと（明日は…）</option>
+        </select>
+      </label>
+      <label class="check"><input type="checkbox" class="holiday"> 伝える日が祝日なら投稿しない</label>
+    </div>
+  </div>
+</template>
+
+<template id="本文雛形">
+  <div class="card body-card">
+    <h3 class="when"></h3>
+    <textarea class="text" rows="9" placeholder="投稿する文章を入力してください"></textarea>
+    <div class="row">
+      <button class="sub insert">日付を入れる</button>
+      <span class="count"></span>
+    </div>
+    <div class="row">
+      <label>画像
+        <select class="image"><option value="">なし</option></select>
+      </label>
+      <label class="upload">画像を追加<input type="file" class="file" accept="image/png,image/jpeg,image/gif" hidden></label>
+      <img class="thumb" hidden alt="">
+    </div>
+  </div>
+</template>
+
+<script src="app.js"></script>
+</body>
+</html>

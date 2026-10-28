@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "管理画面",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["start"],
+      "port": 8787
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+# 設定の点検。schedule.yml を直したのに build.mjs を実行し忘れた場合などに気づけるよう、
+# 毎朝ここで確かめます。失敗すると GitHub からメールが届きます。
+name: 設定の点検
+
+on:
+  push:
+  schedule:
+    - cron: '0 0 * * *' # 日本時間 毎朝9時
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: 実行時刻の設定が schedule.yml と合っているか
+        run: node build.mjs --check
+      - name: 仕組み全体の点検
+        run: node test.mjs

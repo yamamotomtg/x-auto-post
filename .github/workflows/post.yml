@@ -1,0 +1,47 @@
+# このファイルは build.mjs が作ります。手で編集せず、schedule.yml を直してから
+# 「node build.mjs」を実行してください。
+name: 自動投稿
+
+on:
+  schedule:
+    # 日本時間の投稿時刻の10分前に起動し、時刻ちょうどまで待ってから投稿します。
+    # 月曜の買取受付（通常） / 11:00
+    - cron: '50 1 * * 1'
+    # 月曜の買取受付（通常） / 21:00
+    - cron: '50 11 * * 0'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: '投稿せずに、投稿予定と本文の確認だけする'
+        type: boolean
+        default: true
+      force:
+        description: '時刻を待たずにすぐ実行する（テスト用）'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: x-auto-post
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: node post.mjs
+        env:
+          X_API_KEY: ${{ secrets.X_API_KEY }}
+          X_API_SECRET: ${{ secrets.X_API_SECRET }}
+          X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
+          X_ACCESS_TOKEN_SECRET: ${{ secrets.X_ACCESS_TOKEN_SECRET }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          FORCE: ${{ inputs.force }}

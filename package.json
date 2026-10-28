@@ -1,0 +1,19 @@
+{
+  "name": "x-auto-post",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "schedule.yml に書いたルールどおりに X へ自動投稿する",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node app/server.mjs",
+    "build": "node build.mjs",
+    "check": "node build.mjs --check",
+    "preview": "node build.mjs --preview"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.0"
+  }
+}
