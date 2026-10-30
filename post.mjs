@@ -24,10 +24,13 @@ const KEY_NAMES = ['X_API_KEY', 'X_API_SECRET', 'X_ACCESS_TOKEN', 'X_ACCESS_TOKE
 
 const DRY_RUN = process.env.DRY_RUN === 'true';
 const FORCE = process.env.FORCE === 'true';
+const MEDIA_TEST = process.env.MEDIA_TEST === 'true';
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) await main();
 
 async function main() {
+  if (MEDIA_TEST) return await 書き込み権限の確認();
+
   const today = jstNow().date;
   const { posts } = occurrences(loadSchedule(), addDays(today, -1), addDays(today, 7));
   const due = pickDue(posts);
@@ -88,6 +91,34 @@ async function main() {
       console.log(`同じ内容がすでに投稿されているため見送りました（${item.rule.名前}）。`);
     }
   }
+}
+
+/**
+ * 投稿せずに、書き込み権限があるかだけを確かめる。
+ * 画像のアップロードは書き込み権限がないとできないが、それ自体は公開されない
+ * （アップロードした画像は、投稿に使わなければ24時間ほどで消えます）。
+ */
+async function 書き込み権限の確認() {
+  const missing = KEY_NAMES.filter((name) => !process.env[name]);
+  if (missing.length) throw new Error(`X API のキーが設定されていません: ${missing.join(', ')}`);
+
+  const me = await xApi('GET', ME_URL);
+  console.log(`アカウント: @${me.data.username}`);
+
+  const 画像 = loadSchedule().flatMap((r) => r.投稿).find((p) => p.画像)?.画像;
+  if (!画像) {
+    console.log('画像を使う投稿がないため、画像のアップロードは試しませんでした。');
+    return;
+  }
+
+  const image = await readFile(new URL(`./images/${画像}`, import.meta.url));
+  const form = new FormData();
+  form.append('media', new Blob([image], { type: mediaType(画像) }), 画像);
+  form.append('media_category', 'tweet_image');
+  const media = await xApi('POST', UPLOAD_URL, form);
+
+  console.log(`画像 ${画像} のアップロードに成功しました（媒体ID ${media.data.id}）。`);
+  console.log('書き込み権限があり、画像つきの投稿ができる状態です。この確認では投稿していません。');
 }
 
 /** 今このタイミングで投稿すべきものを選ぶ（同じ時刻のものはまとめて返す） */

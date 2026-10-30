@@ -151,6 +151,10 @@ ${crons}
         description: '時刻を待たずにすぐ実行する（テスト用）'
         type: boolean
         default: true
+      media_test:
+        description: '投稿せずに、書き込み権限があるかだけ確かめる'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -177,5 +181,6 @@ jobs:
           X_ACCESS_TOKEN_SECRET: \${{ secrets.X_ACCESS_TOKEN_SECRET }}
           DRY_RUN: \${{ inputs.dry_run }}
           FORCE: \${{ inputs.force }}
+          MEDIA_TEST: \${{ inputs.media_test }}
 `;
 }
