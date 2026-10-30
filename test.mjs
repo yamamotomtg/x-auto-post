@@ -1,5 +1,6 @@
 // 仕組み全体の点検。 実行: node test.mjs
 import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dateKey, holidaysOf } from './holidays.mjs';
 import { loadSchedule, occurrences, utcDate, instantOf, label } from './rules.mjs';
@@ -118,6 +119,38 @@ test('同じ本文が続くと警告する', () => {
   const posts = [{ ...base, at: new Date(at(2026, 11, 1, 10, 0)) }, { ...base, at: new Date(at(2026, 11, 2, 10, 0)) }];
   assert.equal(inspect([], posts, []).warnings.length, 1);
 });
+
+// 画像を添付する処理は、偽のキーで動かすと X から 401 が返るところまで進めば正常。
+// 途中で ReferenceError などで落ちないことを確かめる（本番でしか通らない経路のため）。
+console.log('\n■ 画像つき投稿の経路');
+const 偽のキー = {
+  ...process.env,
+  X_API_KEY: 'test',
+  X_API_SECRET: 'test',
+  X_ACCESS_TOKEN: 'test',
+  X_ACCESS_TOKEN_SECRET: 'test',
+  DRY_RUN: 'false',
+};
+for (const [名前, env] of [
+  ['書き込み権限の確認', { ...偽のキー, MEDIA_TEST: 'true' }],
+  ['実際の投稿', { ...偽のキー, FORCE: 'true' }],
+]) {
+  const 出力 = await new Promise((done) => {
+    const p = spawn(process.execPath, [fileURLToPath(new URL('./post.mjs', import.meta.url))], { env });
+    let text = '';
+    p.stdout.on('data', (d) => (text += d));
+    p.stderr.on('data', (d) => (text += d));
+    p.on('close', () => done(text));
+  });
+  if (/ENOTFOUND|EAI_AGAIN|fetch failed/.test(出力)) {
+    console.log(`  － ${名前}: ネットに繋がらないため省略`);
+    continue;
+  }
+  test(`${名前}: 途中で落ちず、X の認証エラーまで到達する`, () => {
+    assert.doesNotMatch(出力, /ReferenceError|TypeError|SyntaxError/, 出力.split('\n').slice(0, 6).join('\n'));
+    assert.match(出力, /X API エラー 401/);
+  });
+}
 
 console.log('\n■ 祝日（公式データとの突き合わせ）');
 try {

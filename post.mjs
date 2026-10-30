@@ -136,7 +136,13 @@ export function pickDue(posts) {
   return candidates.filter((p) => p.at.getTime() === first);
 }
 
-const mediaType = (name) => (/\.png$/i.test(name) ? 'image/png' : /\.gif$/i.test(name) ? 'image/gif' : 'image/jpeg');
+// main() はこのファイルを読み込んだ直後に動くので、ここは必ず「function」で書くこと
+// （const で書くと、使うときにはまだ用意されておらず動きません）
+function mediaType(name) {
+  if (/\.png$/i.test(name)) return 'image/png';
+  if (/\.gif$/i.test(name)) return 'image/gif';
+  return 'image/jpeg';
+}
 
 async function holidayFromApi(key) {
   try {
