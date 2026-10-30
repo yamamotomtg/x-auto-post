@@ -62,6 +62,7 @@ async function main() {
     await new Promise((resolve) => setTimeout(resolve, wait));
   }
 
+  let 重複 = false;
   for (const item of due) {
     // 法改正などに備え、投稿の直前に公式データ（内閣府の祝日一覧が元）でも確かめる
     if (item.post.祝日なら休む) {
@@ -86,10 +87,16 @@ async function main() {
       const posted = await xApi('POST', TWEET_URL, body, 'application/json');
       console.log(`投稿しました（${item.rule.名前}）: https://x.com/i/status/${posted.data.id}`);
     } catch (e) {
-      // 同じ内容がすでに投稿されている場合（二重起動など）は、失敗にせず見送る
+      // 同じ内容がすでに投稿されている場合は、X に拒否されて投稿されない。
+      // 途中で止めず残りの投稿は続けるが、気づけるように最後に失敗として終える。
       if (!/duplicate/i.test(e.message)) throw e;
-      console.log(`同じ内容がすでに投稿されているため見送りました（${item.rule.名前}）。`);
+      console.error(`同じ内容がすでに投稿されているため、X に拒否されました（${item.rule.名前}）。`);
+      重複 = true;
     }
+  }
+
+  if (重複) {
+    throw new Error('同じ内容の投稿が X に拒否されました。本文を少し変えるか、すでに投稿済みでないか確認してください。');
   }
 }
 
