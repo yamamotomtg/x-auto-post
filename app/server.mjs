@@ -2,6 +2,7 @@
 // このPCの中だけで動きます（外からは繋がりません）。
 
 import http from 'node:http';
+import { spawn } from 'node:child_process';
 import { readFile, writeFile, readdir } from 'node:fs/promises';
 import { extname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -178,7 +179,29 @@ function readBody(req) {
   });
 }
 
+const URL_ = `http://localhost:${PORT}`;
+
 server.listen(PORT, '127.0.0.1', () => {
-  console.log(`管理画面を開きました → http://localhost:${PORT}`);
-  console.log('終了するには Ctrl+C を押してください。');
+  console.log(`管理画面を開きました → ${URL_}`);
+  console.log('終了するには Ctrl+C を押すか、このウィンドウを閉じてください。');
+  ブラウザで開く();
 });
+
+// すでに起動している場合は、二重に立ち上げずそちらを開く
+server.on('error', (e) => {
+  if (e.code !== 'EADDRINUSE') throw e;
+  console.log(`管理画面はすでに起動しています → ${URL_}`);
+  ブラウザで開く();
+  process.exit(0);
+});
+
+function ブラウザで開く() {
+  if (process.env.OPEN_BROWSER === 'false') return;
+  const [cmd, args] =
+    process.platform === 'win32'
+      ? ['cmd', ['/c', 'start', '', URL_]]
+      : process.platform === 'darwin'
+        ? ['open', [URL_]]
+        : ['xdg-open', [URL_]];
+  spawn(cmd, args, { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+}
