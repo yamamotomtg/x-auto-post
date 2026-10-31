@@ -127,7 +127,10 @@ const routes = {
   },
 
   'POST /api/images': async (body) => {
-    const name = basename(String(body.名前 ?? '')).replace(/[^\w.\-]/g, '_');
+    // 日本語のファイル名はそのまま使えるようにし、記号だけを置き換える
+    const name = basename(String(body.名前 ?? ''))
+      .replace(/[^\p{L}\p{N}._-]/gu, '_')
+      .replace(/^[._]+/, '');
     if (!IMAGE_TYPES[extname(name).toLowerCase()]) throw new ScheduleError('画像は jpg・png・gif のみ使えます。');
     const data = Buffer.from(String(body.data ?? '').split(',').pop(), 'base64');
     if (!data.length) throw new ScheduleError('画像が空です。');
