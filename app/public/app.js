@@ -104,8 +104,8 @@ function 描画予定() {
     const 印 = !p.見送り
       ? ''
       : p.除外
-        ? '<span class="tag off">投稿しません</span>'
-        : '<span class="tag holiday">祝日のため投稿しません</span>';
+        ? '<span class="tag off">投稿しない</span>'
+        : '<span class="tag holiday">祝日のため投稿しない</span>';
     html += `<div class="card post${p.見送り ? ' skip' : ''}">
       <div class="time">${esc(p.時刻)}</div>
       <div class="text">${印 ? `<div>${印}</div>` : ''}${esc(p.本文)}
