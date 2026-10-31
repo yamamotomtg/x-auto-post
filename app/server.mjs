@@ -27,6 +27,7 @@ const toApi = (rule, i) => ({
   名前: rule.名前,
   期間: rule.期間.from ? { from: ymd(rule.期間.from), to: ymd(rule.期間.to) } : null,
   優先: rule.優先,
+  除外: [...rule.除外].sort(),
   投稿: rule.投稿.map((p) => ({
     日時: whenToText(p.日時),
     対象日: p.対象日,
@@ -37,11 +38,15 @@ const toApi = (rule, i) => ({
   })),
 });
 
+// 保存されているルールの日付は Date、画面から来たルールの日付は文字列
+const 日付文字列 = (v) => (v instanceof Date ? ymd(v) : v);
+
 /** 画面から来た形・保存されている形 → ルールを読み取る元の形（YAML と同じ） */
 const toRaw = (rule) => ({
   名前: rule.名前,
-  期間: rule.期間?.from ? `${rule.期間.from} 〜 ${rule.期間.to}` : undefined,
+  期間: rule.期間?.from ? `${日付文字列(rule.期間.from)} 〜 ${日付文字列(rule.期間.to)}` : undefined,
   優先: rule.優先 ?? 'ふつう',
+  投稿しない: [...(rule.除外 ?? [])],
   投稿: (rule.投稿 ?? []).map((p) => ({
     日時: typeof p.日時 === 'string' ? p.日時 : whenToText(p.日時),
     対象日: p.対象日 ?? '当日',
@@ -60,6 +65,9 @@ function summarize(rules) {
     日付: ymd(p.投稿日),
     表示: label(p.投稿日),
     時刻: p.時刻,
+    鍵: `${ymd(p.投稿日)} ${p.時刻}`, // 「この回だけ投稿しない」で使う目印
+    除外: p.除外 ?? false,
+    ルール番号: rules.indexOf(p.rule),
     ルール名: p.rule.名前,
     本文: p.本文,
     画像: p.画像,
@@ -103,6 +111,18 @@ const routes = {
 
   'DELETE /api/rules': async (body) => {
     const rules = readRules().map(toRaw).filter((_, i) => i !== body.番号);
+    return save(rules);
+  },
+
+  // 投稿予定の1件だけを「投稿しない」にする／戻す
+  'POST /api/skip': async (body) => {
+    const rules = readRules().map(toRaw);
+    const rule = rules[body.番号];
+    if (!rule) throw new ScheduleError('そのお知らせが見つかりません。画面を更新してください。');
+    const 除外 = new Set(rule.投稿しない);
+    if (body.戻す) 除外.delete(body.鍵);
+    else 除外.add(body.鍵);
+    rule.投稿しない = [...除外];
     return save(rules);
   },
 

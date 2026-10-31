@@ -54,8 +54,25 @@ function normalizeRule(raw, i) {
     名前,
     期間: parsePeriod(raw['期間'], 名前),
     優先,
+    除外: parseSkips(raw['投稿しない'], 名前),
     投稿: posts.map((p, j) => normalizePost(p, raw, `${名前} の${j + 1}件目の投稿`)),
   };
+}
+
+// 「この回だけ投稿しない」の指定。日付だけならその日の全部、時刻まで書けばその回だけ。
+function parseSkips(value, where) {
+  if (value == null) return new Set();
+  const list = Array.isArray(value) ? value : [value];
+  return new Set(
+    list.map((v) => {
+      // YAML は「2026-11-06」のような書き方を日付として読み取る
+      if (v instanceof Date) return dateKey(v);
+      const m = /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:\s+(\d{1,2}):(\d{2}))?$/.exec(String(v).trim());
+      if (!m) fail(where, `の「投稿しない」が読めません: ${v}（例: 2026-11-03 または 2026-11-03 10:00）`);
+      const day = dateKey(utcDate(Number(m[1]), Number(m[2]), Number(m[3])));
+      return m[4] ? `${day} ${m[4].padStart(2, '0')}:${m[5]}` : day;
+    }),
+  );
 }
 
 function normalizePost(raw, rule, where) {
@@ -154,8 +171,10 @@ export function occurrences(rules, fromDate, toDate) {
           画像: post.画像,
           優先: rule.優先,
         };
+        const 除外 = rule.除外.has(dateKey(d)) || rule.除外.has(`${dateKey(d)} ${item.時刻}`);
         const holiday = post.祝日なら休む ? holidayName(dateKey(target)) : null;
-        if (holiday) skipped.push({ ...item, 理由: `${label(target)}は${holiday}` });
+        if (除外) skipped.push({ ...item, 除外: true, 理由: 'この回は投稿しない設定です' });
+        else if (holiday) skipped.push({ ...item, 理由: `${label(target)}は${holiday}` });
         else found.push(item);
       }
     }

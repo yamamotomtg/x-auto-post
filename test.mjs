@@ -49,6 +49,17 @@ test('祝日の月曜（11/23 勤労感謝の日）は前夜も当日も投稿�
 test('祝日でも「祝日なら休む」を書いていないルールは投稿する（11/3 文化の日）', () => {
   assert.equal(find(nov.posts, 11, 3, '10:00').length, 1);
 });
+test('「投稿しない」で指定した回だけ投稿しない（11/5 10:00）', () => {
+  assert.equal(find(nov.posts, 11, 5, '10:00').length, 0);
+  assert.equal(find(nov.posts, 11, 5, '21:00').length, 1, '同じ日の別の時刻は投稿する');
+  const 見送り = find(nov.skipped, 11, 5, '10:00');
+  assert.equal(見送り.length, 1);
+  assert.equal(見送り[0].除外, true);
+});
+test('「投稿しない」に日付だけ書くと、その日は全部投稿しない（11/6）', () => {
+  assert.equal(find(nov.posts, 11, 6, '10:00').length, 0);
+  assert.equal(find(nov.posts, 11, 6, '21:00').length, 0);
+});
 test('期間外の日には臨時ルールを使わない', () => {
   assert.equal(find(nov.posts, 11, 9, '10:00').length, 0);
 });

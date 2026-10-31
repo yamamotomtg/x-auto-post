@@ -94,15 +94,42 @@ function 描画予定() {
       html += `<div class="day">${esc(p.表示)}</div>`;
       前の日 = p.表示;
     }
+    const 戻す = p.除外 ? 1 : 0;
+    const 操作 =
+      p.見送り && !p.除外
+        ? ''
+        : `<button class="ghost skip" data-rule="${p.ルール番号}" data-key="${esc(p.鍵)}" data-back="${戻す}">${
+            戻す ? '投稿するように戻す' : 'この回は投稿しない'
+          }</button>`;
+    const 印 = !p.見送り
+      ? ''
+      : p.除外
+        ? '<span class="tag off">投稿しません</span>'
+        : '<span class="tag holiday">祝日のため投稿しません</span>';
     html += `<div class="card post${p.見送り ? ' skip' : ''}">
       <div class="time">${esc(p.時刻)}</div>
-      <div class="text">${esc(p.本文)}
-        <div class="meta">${esc(p.ルール名)}${p.見送り ? ` ／ ${esc(p.理由)}のため見送り` : ''}</div>
+      <div class="text">${印 ? `<div>${印}</div>` : ''}${esc(p.本文)}
+        <div class="meta">${esc(p.ルール名)}${p.見送り ? ` ／ ${esc(p.理由)}` : ''}</div>
       </div>
       ${p.画像 ? `<img class="thumb" src="/images/${encodeURIComponent(p.画像)}" alt="">` : ''}
+      <div class="post-actions">${操作}</div>
     </div>`;
   }
   $('#予定').innerHTML = html;
+
+  $$('.skip').forEach(
+    (b) =>
+      (b.onclick = async () => {
+        b.disabled = true;
+        try {
+          await api('POST', '/api/skip', { 番号: Number(b.dataset.rule), 鍵: b.dataset.key, 戻す: b.dataset.back === '1' });
+          await 読み込み();
+        } catch (e) {
+          alert(e.message);
+          b.disabled = false;
+        }
+      }),
+  );
 }
 
 // ---------- お知らせ一覧 ----------
@@ -171,6 +198,7 @@ function 編集開始(番号) {
       種類: r.期間 ? '期間' : 'ずっと',
       期間: r.期間 ?? { from: '', to: '' },
       優先: r.優先,
+      除外: r.除外 ?? [],
       タイミング: r.投稿.map((p) => {
         const [日, 時刻] = p.日時.split(' ');
         const kind = 日 === '毎日' ? 'daily' : DOW.includes(日) ? 'dow' : 'date';
@@ -365,13 +393,33 @@ async function 確認を描く() {
     if (結果.問題.length) html += note('error', '直してください', 結果.問題);
     if (競合.length) html += 競合の説明(競合, 名前);
 
-    html += `<div class="card"><h3>最初の投稿予定</h3>${
-      これの予定.length
-        ? これの予定
-            .map((p) => `<div class="post"><div class="time">${esc(p.表示)} ${esc(p.時刻)}</div><div class="text">${esc(p.本文)}</div></div><hr>`)
-            .join('')
-        : '<p class="hint">70日以内に投稿の予定はありません。期間や曜日の指定を確認してください。</p>'
-    }</div>`;
+    html += `<div class="card"><h3>投稿の予定</h3>
+      <p class="hint">投稿しなくてよい回は「この回は投稿しない」で外せます。</p>${
+        これの予定.length
+          ? これの予定
+              .map(
+                (p) => `<div class="post">
+                  <div class="time">${esc(p.表示)} ${esc(p.時刻)}</div>
+                  <div class="text">${esc(p.本文)}</div>
+                  <div class="post-actions"><button class="ghost draft-skip" data-key="${esc(p.鍵)}">この回は投稿しない</button></div>
+                </div><hr>`,
+              )
+              .join('')
+          : '<p class="hint">70日以内に投稿の予定はありません。期間や曜日の指定を確認してください。</p>'
+      }</div>`;
+
+    const 除外 = 結果.見送り.filter((p) => p.ルール名 === 名前 && p.除外);
+    if (除外.length) {
+      html += `<div class="card"><h3>投稿しない回（${除外.length}件）</h3>${除外
+        .map(
+          (p) => `<div class="post skip">
+            <div class="time">${esc(p.表示)} ${esc(p.時刻)}</div>
+            <div class="text meta">${esc(p.本文.split('\n')[0])}…</div>
+            <div class="post-actions"><button class="sub draft-back" data-key="${esc(p.鍵)}">戻す</button></div>
+          </div>`,
+        )
+        .join('')}</div>`;
+    }
 
     if (これの見送り.length) {
       html += note(
@@ -381,6 +429,21 @@ async function 確認を描く() {
       );
     }
     box.innerHTML = html;
+
+    $$('.draft-skip').forEach(
+      (b) =>
+        (b.onclick = () => {
+          編集中.下書き.除外 = [...new Set([...編集中.下書き.除外, b.dataset.key])];
+          確認を描く();
+        }),
+    );
+    $$('.draft-back').forEach(
+      (b) =>
+        (b.onclick = () => {
+          編集中.下書き.除外 = 編集中.下書き.除外.filter((k) => k !== b.dataset.key);
+          確認を描く();
+        }),
+    );
 
     $$('[name="優先"]').forEach(
       (r) =>
@@ -437,6 +500,7 @@ function ルールを組み立てる() {
     名前: d.名前.trim(),
     期間: d.種類 === '期間' ? { from: d.期間.from, to: d.期間.to } : null,
     優先: d.優先,
+    投稿しない: d.除外,
     投稿,
   };
 }

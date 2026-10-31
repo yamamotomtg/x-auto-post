@@ -40,6 +40,10 @@ function serializeRule(rule) {
   const lines = [`- 名前: ${quote(rule.名前)}`];
   if (rule.期間.from) lines.push(`  期間: ${ymd(rule.期間.from)} 〜 ${ymd(rule.期間.to)}`);
   if (rule.優先 !== 'ふつう') lines.push(`  優先: ${rule.優先}`);
+  if (rule.除外.size) {
+    lines.push('  投稿しない:');
+    for (const k of [...rule.除外].sort()) lines.push(`    - "${k}"`); // 日付として解釈されないよう引用符で囲む
+  }
   lines.push('  投稿:');
 
   for (const post of rule.投稿) {

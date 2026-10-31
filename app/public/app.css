@@ -57,7 +57,12 @@ button[disabled] { opacity: .5; cursor: default; }
 .post .time { font-variant-numeric: tabular-nums; font-weight: 600; min-width: 52px; }
 .post .text { white-space: pre-wrap; flex: 1; }
 .post .thumb { width: 92px; border-radius: 6px; border: 1px solid var(--line); }
-.post.skip { opacity: .6; }
+.post.skip { background: #f4f5f7; border-style: dashed; border-color: #c9ced6; }
+.post.skip .time { color: var(--muted); text-decoration: line-through; }
+.post.skip .text { color: #71787f; }
+.post.skip .thumb { filter: grayscale(1); opacity: .55; }
+.tag.off { background: #fdecea; color: var(--danger); font-weight: 600; margin-right: 8px; }
+.tag.holiday { background: var(--warn-bg); color: var(--warn); font-weight: 600; margin-right: 8px; }
 .meta { color: var(--muted); font-size: 13px; }
 .rule-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .rule-head h3 { margin: 0; font-size: 16px; }
@@ -101,3 +106,5 @@ legend { padding: 0 6px; color: var(--muted); font-size: 13px; }
 .upload { display: inline-block; border: 1px solid var(--line); border-radius: 8px; padding: 8px 14px; cursor: pointer; background: #eef2f7; margin: 6px 0; }
 .thumb { max-width: 120px; border-radius: 6px; border: 1px solid var(--line); }
 pre.log { background: #11161c; color: #d7e0ea; padding: 12px; border-radius: 8px; overflow-x: auto; font-size: 12px; white-space: pre-wrap; }
+.post-actions { margin-left: auto; display: flex; align-items: flex-start; }
+.post-actions button { font-size: 13px; padding: 6px 10px; white-space: nowrap; }
