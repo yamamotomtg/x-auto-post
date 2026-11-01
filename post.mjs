@@ -38,7 +38,7 @@ async function main() {
   if (!due.length) {
     const next = posts.find((p) => p.at.getTime() > Date.now());
     console.log('いま投稿するものはありません。' + (next ? `次の予定: ${label(next.投稿日)} ${next.時刻}（${next.rule.名前}）` : ''));
-    return;
+    return await 投稿漏れの確認(posts);
   }
 
   for (const item of due) {
@@ -98,6 +98,40 @@ async function main() {
   if (重複) {
     throw new Error('同じ内容の投稿が X に拒否されました。本文を少し変えるか、すでに投稿済みでないか確認してください。');
   }
+}
+
+/**
+ * 起動が遅れるなどで投稿できなかった回がないか確かめ、見つかれば失敗として終える
+ * （GitHub からメールが届き、気づけるようにするため）。
+ * X に問い合わせるのは、投稿漏れの疑いがあるときだけ（問い合わせにも費用がかかるため）。
+ */
+async function 投稿漏れの確認(posts) {
+  const 今 = Date.now();
+  const 疑い = posts.filter(
+    (p) => p.at.getTime() < 今 - LATE_LIMIT_MINUTES * 60e3 && p.at.getTime() > 今 - 12 * 3600e3,
+  );
+  if (!疑い.length || DRY_RUN || KEY_NAMES.some((name) => !process.env[name])) return;
+
+  const 投稿済み = await 最近の投稿();
+  const 漏れ = 疑い.filter((p) => !投稿済み.has(p.本文.trim()));
+  if (!漏れ.length) {
+    console.log(`${疑い.length}件の過去の予定は、すでに投稿済みでした。`);
+    return;
+  }
+
+  for (const p of 漏れ) console.error(`投稿されていません: ${label(p.投稿日)} ${p.時刻}（${p.rule.名前}）`);
+  throw new Error(
+    `${漏れ.length}件が投稿されないまま時間切れになりました。` +
+      'GitHub の定期実行が遅れた可能性があります。必要なら Run workflow から手動で投稿してください。',
+  );
+}
+
+/** 直近の自分の投稿の本文を集める */
+async function 最近の投稿() {
+  const me = await xApi('GET', ME_URL);
+  const url = `https://api.x.com/2/users/${me.data.id}/tweets?max_results=10&exclude=replies,retweets`;
+  const res = await xApi('GET', url);
+  return new Set((res.data ?? []).map((t) => t.text.trim()));
 }
 
 /**
@@ -171,10 +205,11 @@ async function xApi(method, url, body, contentType) {
   return JSON.parse(raw);
 }
 
-// OAuth 1.0a（ユーザーコンテキスト）の署名。JSON・multipart の本文は署名対象に含めない。
+// OAuth 1.0a（ユーザーコンテキスト）の署名。
+// URL のクエリは署名に含める決まり。JSON・multipart の本文は含めない。
 function oauthHeader(method, url) {
   const enc = (s) => encodeURIComponent(s).replace(/[!'()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
-  const params = {
+  const oauth = {
     oauth_consumer_key: process.env.X_API_KEY,
     oauth_nonce: crypto.randomBytes(16).toString('hex'),
     oauth_signature_method: 'HMAC-SHA1',
@@ -182,9 +217,19 @@ function oauthHeader(method, url) {
     oauth_token: process.env.X_ACCESS_TOKEN,
     oauth_version: '1.0',
   };
-  const paramString = Object.keys(params).sort().map((k) => `${enc(k)}=${enc(params[k])}`).join('&');
-  const baseString = [method, enc(url), enc(paramString)].join('&');
+
+  const baseString = 署名のもと(method, url, oauth);
   const signingKey = `${enc(process.env.X_API_SECRET)}&${enc(process.env.X_ACCESS_TOKEN_SECRET)}`;
-  params.oauth_signature = crypto.createHmac('sha1', signingKey).update(baseString).digest('base64');
-  return `OAuth ${Object.keys(params).sort().map((k) => `${enc(k)}="${enc(params[k])}"`).join(', ')}`;
+  oauth.oauth_signature = crypto.createHmac('sha1', signingKey).update(baseString).digest('base64');
+
+  return `OAuth ${Object.keys(oauth).sort().map((k) => `${enc(k)}="${enc(oauth[k])}"`).join(', ')}`;
+}
+
+/** 署名のもとになる文字列。URL のクエリは署名に含め、URL 自体はクエリを除いた形で使う。 */
+export function 署名のもと(method, url, oauthParams) {
+  const enc = (s) => encodeURIComponent(s).replace(/[!'()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+  const { origin, pathname, searchParams } = new URL(url);
+  const すべて = { ...oauthParams, ...Object.fromEntries(searchParams) };
+  const paramString = Object.keys(すべて).sort().map((k) => `${enc(k)}=${enc(すべて[k])}`).join('&');
+  return [method, enc(origin + pathname), enc(paramString)].join('&');
 }

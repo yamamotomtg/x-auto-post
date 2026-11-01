@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { dateKey, holidaysOf } from './holidays.mjs';
 import { loadSchedule, occurrences, utcDate, instantOf, label } from './rules.mjs';
 import { cronEntries, inspect } from './build.mjs';
-import { pickDue } from './post.mjs';
+import { pickDue, 署名のもと } from './post.mjs';
 
 const SAMPLE = fileURLToPath(new URL('./tests/schedule-sample.yml', import.meta.url));
 let failed = 0;
@@ -130,6 +130,30 @@ test('同じ本文が続くと警告する', () => {
   const posts = [{ ...base, at: new Date(at(2026, 11, 1, 10, 0)) }, { ...base, at: new Date(at(2026, 11, 2, 10, 0)) }];
   assert.equal(inspect([], posts, []).warnings.length, 1);
 });
+
+console.log('\n■ X API の署名');
+{
+  const oauth = {
+    oauth_consumer_key: 'key',
+    oauth_nonce: 'n',
+    oauth_signature_method: 'HMAC-SHA1',
+    oauth_timestamp: '1',
+    oauth_token: 'tok',
+    oauth_version: '1.0',
+  };
+  const もと = 署名のもと('GET', 'https://api.x.com/2/users/123/tweets?max_results=10&exclude=replies', oauth);
+  const [method, url, params] = もと.split('&');
+  test('方式とURLはクエリを除いた形で使う', () => {
+    assert.equal(method, 'GET');
+    assert.equal(decodeURIComponent(url), 'https://api.x.com/2/users/123/tweets');
+  });
+  test('クエリも署名に含め、名前順に並べる', () => {
+    assert.equal(
+      decodeURIComponent(params),
+      'exclude=replies&max_results=10&oauth_consumer_key=key&oauth_nonce=n&oauth_signature_method=HMAC-SHA1&oauth_timestamp=1&oauth_token=tok&oauth_version=1.0',
+    );
+  });
+}
 
 // 画像を添付する処理は、偽のキーで動かすと X から 401 が返るところまで進めば正常。
 // 途中で ReferenceError などで落ちないことを確かめる（本番でしか通らない経路のため）。
