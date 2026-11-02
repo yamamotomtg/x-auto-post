@@ -2,10 +2,14 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { readFileSync } from 'node:fs';
 import { dateKey, holidaysOf } from './holidays.mjs';
-import { loadSchedule, occurrences, utcDate, instantOf, label } from './rules.mjs';
-import { cronEntries, inspect } from './build.mjs';
-import { pickDue, 署名のもと } from './post.mjs';
+import { occurrences, utcDate, instantOf, label } from './rules.mjs';
+import { loadSchedule } from './schedule-file.mjs';
+import { inspect } from './build.mjs';
+import { 投稿すべきもの } from './schedule-core.mjs';
+import { 署名のもと } from './x-api.mjs';
+import worker from './worker.mjs';
 
 const SAMPLE = fileURLToPath(new URL('./tests/schedule-sample.yml', import.meta.url));
 let failed = 0;
@@ -86,38 +90,22 @@ test('どちらも「ふつう」なら両方とも投稿する', () => {
 console.log('\n■ 投稿するかどうかの判定（日曜21時の投稿）');
 const window = nov.posts;
 test('10分前に起動 → 投稿する', () => {
-  const due = withNow(at(2026, 11, 1, 20, 50), () => pickDue(window));
+  const due = withNow(at(2026, 11, 1, 20, 50), () => 投稿すべきもの(window, { 早め: 15 }));
   assert.equal(due.length, 1);
   assert.equal(due[0].時刻, '21:00');
 });
 test('何時間も前 → 投稿しない', () => {
-  assert.equal(withNow(at(2026, 11, 1, 15, 0), () => pickDue(window)).length, 0);
+  assert.equal(withNow(at(2026, 11, 1, 15, 0), () => 投稿すべきもの(window, { 早め: 15 })).length, 0);
 });
 test('起動が30分遅れた → それでも投稿する', () => {
-  assert.equal(withNow(at(2026, 11, 1, 21, 30), () => pickDue(window)).length, 1);
+  assert.equal(withNow(at(2026, 11, 1, 21, 30), () => 投稿すべきもの(window, { 早め: 15 })).length, 1);
 });
 test('1時間以上遅れた → 投稿しない', () => {
-  assert.equal(withNow(at(2026, 11, 1, 22, 10), () => pickDue(window)).length, 0);
+  assert.equal(withNow(at(2026, 11, 1, 22, 10), () => 投稿すべきもの(window, { 早め: 15 })).length, 0);
 });
 test('同じ時刻のものは一度にまとめて投稿する', () => {
-  const due = withNow(at(2026, 11, 2, 9, 55), () => pickDue(window));
+  const due = withNow(at(2026, 11, 2, 9, 55), () => 投稿すべきもの(window, { 早め: 15 }));
   assert.equal(due.length, 1, '11/2 10:00 は臨時のみ');
-});
-
-console.log('\n■ 実行時刻（日本時間 → UTC の cron）');
-const cronsOf = (rs) => Object.fromEntries(cronEntries(rs).map(([line, note]) => [note, line]));
-const 毎週だけ = cronsOf(rules.filter((r) => r.名前 === '通常'));
-const crons = cronsOf(rules);
-test('月曜11:00 → UTC 月曜 01:50', () => assert.equal(毎週だけ['通常 / 11:00'], '50 1 * * 1'));
-test('日曜21:00 → UTC 日曜 11:50', () => assert.equal(毎週だけ['通常 / 21:00'], '50 11 * * 0'));
-test('月曜08:00 → UTC 日曜 22:50（前日にずれる）', () => assert.equal(毎週だけ['通常 / 08:00'], '50 22 * * 0'));
-test('毎日10:00 → UTC 毎日 00:50', () => assert.equal(crons['臨時 / 10:00'], '50 0 * * *'));
-test('日付指定は毎日起動して実行時に判定する', () => assert.equal(crons['臨時 / 07:30'], '20 22 * * *'));
-test('同じ時刻に毎日と毎週があるときは、毎日の起動だけにする（二重起動を防ぐ）', () => {
-  const lines = cronEntries(rules).map(([line]) => line);
-  assert.equal(lines.filter((l) => l.startsWith('50 11')).length, 1, '21:00 の起動は1つだけ');
-  assert.ok(lines.includes('50 11 * * *'));
-  assert.equal(new Set(lines).size, lines.length, '同じ時刻の重複はない');
 });
 
 console.log('\n■ 本文の点検');
@@ -184,6 +172,67 @@ for (const [名前, env] of [
   test(`${名前}: 途中で落ちず、X の認証エラーまで到達する`, () => {
     assert.doesNotMatch(出力, /ReferenceError|TypeError|SyntaxError/, 出力.split('\n').slice(0, 6).join('\n'));
     assert.match(出力, /X API エラー 401/);
+  });
+}
+
+// Cloudflare 上の動き。ネットにはつながず、やり取りを差し替えて確かめる。
+console.log('\n■ Cloudflare の投稿処理');
+{
+  const env = {
+    SCHEDULE_URL: 'https://example.test/schedule.yml',
+    IMAGE_BASE: 'https://example.test/images/',
+    X_API_KEY: 'k',
+    X_API_SECRET: 'k',
+    X_ACCESS_TOKEN: 'k',
+    X_ACCESS_TOKEN_SECRET: 'k',
+  };
+  const 予定表 = readFileSync(SAMPLE, 'utf8');
+
+  const 動かす = async (いつ) => {
+    const 送信記録 = [];
+    const 本物 = globalThis.fetch;
+    globalThis.fetch = async (url, options = {}) => {
+      const u = String(url);
+      送信記録.push({ url: u, body: options.body });
+      if (u === env.SCHEDULE_URL) return new Response(予定表);
+      if (u.startsWith(env.IMAGE_BASE)) return new Response(new Uint8Array([1, 2, 3]));
+      if (u.includes('holidays-jp')) return new Response('{}');
+      if (u.includes('/2/media/upload')) return new Response(JSON.stringify({ data: { id: 'media1' } }));
+      if (u.includes('/2/tweets')) return new Response(JSON.stringify({ data: { id: '12345' } }));
+      throw new Error(`想定外の通信: ${u}`);
+    };
+    try {
+      const 待つ = [];
+      await worker.scheduled({ scheduledTime: いつ }, env, { waitUntil: (p) => 待つ.push(p) });
+      await Promise.all(待つ);
+    } finally {
+      globalThis.fetch = 本物;
+    }
+    const 投稿 = 送信記録.filter((r) => r.url.includes('/2/tweets'));
+    return { 送信記録, 投稿, 本文: 投稿.map((r) => JSON.parse(r.body).text) };
+  };
+
+  const 結果 = await 動かす(at(2026, 11, 3, 10, 0));
+  test('時刻ちょうどに、その回を投稿する', () => {
+    assert.deepEqual(結果.本文, ['本日11月3日(火)はメンテナンスのため100枚までです。']);
+  });
+
+  test('1分ずれた時刻では、同じ回を二度投稿しない', async () => {
+    assert.equal((await 動かす(at(2026, 11, 3, 10, 1))).投稿.length, 0);
+  });
+
+  test('「投稿しない」に指定した回は投稿しない（11/5 10:00）', async () => {
+    assert.equal((await 動かす(at(2026, 11, 5, 10, 0))).投稿.length, 0);
+  });
+
+  test('投稿する時刻でないときは、X に一切つながない', async () => {
+    const r = await 動かす(at(2026, 11, 3, 14, 0));
+    assert.equal(r.投稿.length, 0);
+    assert.ok(!r.送信記録.some((x) => x.url.includes('api.x.com')));
+  });
+
+  test('祝日の月曜は投稿しない（11/23 勤労感謝の日）', async () => {
+    assert.equal((await 動かす(at(2026, 11, 23, 11, 0))).投稿.length, 0);
   });
 }
 

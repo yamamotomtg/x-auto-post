@@ -11,9 +11,15 @@
     "start": "node app/server.mjs",
     "build": "node build.mjs",
     "check": "node build.mjs --check",
-    "preview": "node build.mjs --preview"
+    "preview": "node build.mjs --preview",
+    "deploy": "wrangler deploy",
+    "cf-login": "wrangler login",
+    "cf-logs": "wrangler tail"
   },
   "dependencies": {
     "js-yaml": "^4.1.0"
+  },
+  "devDependencies": {
+    "wrangler": "^4"
   }
 }

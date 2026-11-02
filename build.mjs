@@ -6,8 +6,8 @@
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { LEAD_MINUTES } from './post.mjs';
-import { loadSchedule, occurrences, addDays, label, jstNow, weightedLength } from './rules.mjs';
+import { occurrences, addDays, label, jstNow, weightedLength } from './rules.mjs';
+import { loadSchedule } from './schedule-file.mjs';
 
 const WORKFLOW = fileURLToPath(new URL('./.github/workflows/post.yml', import.meta.url));
 const PREVIEW_DAYS = 70;
@@ -97,50 +97,13 @@ function printPreview(posts, skipped) {
   }
 }
 
-/** 投稿時刻の LEAD_MINUTES 分前に起動する cron を作る（日本時間 → UTC） */
-export function cronEntries(rules) {
-  const 時刻ごと = new Map();
-  for (const rule of rules) {
-    for (const post of rule.投稿) {
-      const { kind, dow, hour, minute } = post.日時;
-      const total = hour * 60 + minute - LEAD_MINUTES - 9 * 60;
-      const shift = Math.floor(total / 1440);
-      const m = ((total % 1440) + 1440) % 1440;
-      const key = `${m % 60} ${Math.floor(m / 60)}`;
-      const 枠 = 時刻ごと.get(key) ?? { 毎日: false, 曜日: new Map() };
-      // 特定の日付の指定は、日付がずれても確実に拾えるよう毎日起動にする（実行時にもう一度判定する）
-      const note = `${rule.名前} / ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
-      if (kind === 'dow') 枠.曜日.set((((dow + shift) % 7) + 7) % 7, note);
-      else {
-        枠.毎日 = true;
-        枠.毎日の説明 = note;
-      }
-      時刻ごと.set(key, 枠);
-    }
-  }
-
-  // 同じ時刻に毎日起動があるなら、曜日ごとの起動は作らない（二重に起動して同じ投稿が2回出るのを防ぐ）
-  const entries = [];
-  for (const [key, 枠] of 時刻ごと) {
-    if (枠.毎日) entries.push([`${key} * * *`, 枠.毎日の説明]);
-    else for (const [dow, note] of 枠.曜日) entries.push([`${key} * * ${dow}`, note]);
-  }
-  return entries.sort();
-}
-
-export function buildWorkflow(rules) {
-  const crons = cronEntries(rules)
-    .map(([line, note]) => `    # ${note}\n    - cron: '${line}'`)
-    .join('\n');
-
+export function buildWorkflow() {
   return `# このファイルは build.mjs が作ります。手で編集せず、schedule.yml を直してから
 # 「node build.mjs」を実行してください。
 name: 自動投稿
 
+# ふだんの定期投稿は Cloudflare が行います。ここは手動で投稿・確認するためのものです。
 on:
-  schedule:
-    # 日本時間の投稿時刻の${LEAD_MINUTES}分前に起動し、時刻ちょうどまで待ってから投稿します。
-${crons}
   workflow_dispatch:
     inputs:
       dry_run:

@@ -1,0 +1,17 @@
+# Cloudflare の設定。投稿の実行はここで動きます。
+# 配置: npm run deploy（初回は npx wrangler login が必要）
+
+name = "x-auto-post"
+main = "worker.mjs"
+compatibility_date = "2026-10-01"
+
+# 1分ごとに動き、その時刻の投稿があれば X に出します
+[triggers]
+crons = ["* * * * *"]
+
+[vars]
+SCHEDULE_URL = "https://raw.githubusercontent.com/yamamotomtg/x-auto-post/main/schedule.yml"
+IMAGE_BASE = "https://raw.githubusercontent.com/yamamotomtg/x-auto-post/main/images/"
+
+[observability]
+enabled = true

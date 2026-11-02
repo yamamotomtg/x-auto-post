@@ -4,7 +4,7 @@
 import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { buildWorkflow } from './build.mjs';
-import { loadSchedule } from './rules.mjs';
+import { loadSchedule } from './schedule-file.mjs';
 
 const SCHEDULE = fileURLToPath(new URL('./schedule.yml', import.meta.url));
 const WORKFLOW = fileURLToPath(new URL('./.github/workflows/post.yml', import.meta.url));

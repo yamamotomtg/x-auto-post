@@ -1,7 +1,9 @@
-// schedule.yml を読み込み、「いつ・何を投稿するか」の一覧に展開する。
+// schedule.yml の中身を「いつ・何を投稿するか」の一覧に展開する。
 // 日付はすべて日本時間。JST の壁時計の日付を UTC の Date で表して扱う。
+//
+// このファイルは Cloudflare でも動かすため、パソコンのファイル読み込みは行わない
+// （ファイルから読むときは schedule-file.mjs を使う）。
 
-import { readFileSync } from 'node:fs';
 import yaml from 'js-yaml';
 import { dateKey, holidayName } from './holidays.mjs';
 
@@ -33,8 +35,9 @@ const fail = (where, message) => {
   throw new ScheduleError(`schedule.yml の「${where}」${message}`);
 };
 
-export function loadSchedule(path = process.env.SCHEDULE_FILE ?? new URL('./schedule.yml', import.meta.url)) {
-  const doc = yaml.load(readFileSync(path, 'utf8'));
+/** schedule.yml の文字列を読み取ってルールの一覧にする */
+export function parseSchedule(text) {
+  const doc = yaml.load(text);
   if (doc == null) return [];
   if (!Array.isArray(doc)) throw new ScheduleError('schedule.yml はルールの一覧（先頭が "- 名前:" の形）で書いてください。');
   return doc.map(normalizeRule);

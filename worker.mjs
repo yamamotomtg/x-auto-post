@@ -1,0 +1,93 @@
+// Cloudflare で1分ごとに動き、時刻になった投稿を X に出す。
+//
+// 投稿内容（schedule.yml と画像）は GitHub から読み取るので、
+// 管理画面で編集して「GitHubへ反映」すれば、ここを触らなくても反映されます。
+
+import { parseSchedule, occurrences, addDays, label, jstNow } from './rules.mjs';
+import { 投稿すべきもの, 祝日か } from './schedule-core.mjs';
+import { xClient, キーを読む, XApiError } from './x-api.mjs';
+
+// 同じ回を二度投稿しないための記録（Cloudflare が同じ処理を使い回している間だけ有効）
+const 投稿済み = new Set();
+// 読み取った schedule.yml を覚えておき、変わっていなければ読み直さない
+let 覚えている = { text: null, rules: [] };
+
+export default {
+  async scheduled(controller, env, ctx) {
+    ctx.waitUntil(実行(env, controller.scheduledTime));
+  },
+
+  // ブラウザで開くと、次の投稿予定を確認できる（公開されている内容のみ）
+  async fetch(request, env) {
+    try {
+      const rules = await ルールを取る(env);
+      const today = jstNow().date;
+      const { posts, skipped } = occurrences(rules, today, addDays(today, 14));
+      const 行 = (p, 印 = '') => `${label(p.投稿日)} ${p.時刻}  ${p.rule.名前}${印}`;
+      const text = [
+        `現在（日本時間）: ${new Date(Date.now() + 9 * 3600e3).toISOString().replace('T', ' ').slice(0, 16)}`,
+        '',
+        '■ 今後2週間の投稿予定',
+        ...posts.map((p) => '  ' + 行(p)),
+        '',
+        '■ 投稿しない回',
+        ...skipped.map((p) => '  ' + 行(p, `  … ${p.理由}`)),
+      ].join('\n');
+      return new Response(text, { headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+    } catch (e) {
+      return new Response(`設定を読み取れませんでした: ${e.message}`, { status: 500 });
+    }
+  },
+};
+
+async function 実行(env, now = Date.now()) {
+  const rules = await ルールを取る(env);
+  const today = jstNow(now).date;
+  const { posts } = occurrences(rules, addDays(today, -1), addDays(today, 2));
+
+  // 1分ごとに動くので、いまの時刻を過ぎたばかりの回だけを拾う
+  const due = 投稿すべきもの(posts, { 早め: 0, 遅れ上限: 3, now });
+  if (!due.length) return;
+
+  const x = xClient(キーを読む(env));
+  for (const item of due) {
+    const 目印 = `${item.投稿日.toISOString().slice(0, 10)} ${item.時刻} ${item.rule.名前}`;
+    if (投稿済み.has(目印)) continue;
+
+    const 祝日 = await 祝日か(item);
+    if (祝日) {
+      console.log(`${label(item.対象日)}は${祝日}のため投稿しません（${item.rule.名前}）`);
+      投稿済み.add(目印);
+      continue;
+    }
+
+    投稿済み.add(目印); // 投稿の前に記録し、重複して動いても二重投稿しないようにする
+    try {
+      const 媒体ID = item.画像 ? await x.画像をあげる(await 画像を取る(env, item.画像), item.画像) : null;
+      const posted = await x.投稿する(item.本文, 媒体ID);
+      console.log(`投稿しました（${item.rule.名前}）: https://x.com/i/status/${posted.id}`);
+    } catch (e) {
+      if (e instanceof XApiError && e.重複) {
+        console.log(`同じ内容がすでに投稿されているため見送りました（${item.rule.名前}）`);
+        continue;
+      }
+      投稿済み.delete(目印); // 次の実行でやり直せるようにする
+      console.error(`投稿に失敗しました（${item.rule.名前}）: ${e.message}`);
+      throw e;
+    }
+  }
+}
+
+async function ルールを取る(env) {
+  const res = await fetch(env.SCHEDULE_URL, { cf: { cacheTtl: 30, cacheEverything: true } });
+  if (!res.ok) throw new Error(`schedule.yml を読み取れません（HTTP ${res.status}）`);
+  const text = await res.text();
+  if (text !== 覚えている.text) 覚えている = { text, rules: parseSchedule(text) };
+  return 覚えている.rules;
+}
+
+async function 画像を取る(env, 名前) {
+  const res = await fetch(env.IMAGE_BASE + encodeURIComponent(名前), { cf: { cacheTtl: 3600, cacheEverything: true } });
+  if (!res.ok) throw new Error(`画像 ${名前} を読み取れません（HTTP ${res.status}）`);
+  return new Uint8Array(await res.arrayBuffer());
+}
