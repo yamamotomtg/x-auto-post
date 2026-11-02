@@ -66,21 +66,22 @@ Settings → Secrets に4つのキーを登録済み（投稿漏れの点検で�
 ### 3. Cloudflare（投稿の実行）
 
 <https://dash.cloudflare.com/sign-up> で無料アカウントを作り、このフォルダで次を順に実行します。
+（PowerShell では `npx` ではなく **`npx.cmd`** と打ちます。`npx` のままだと「スクリプトの実行が無効」と出ます）
 
 ```bash
-npx wrangler login
+npx.cmd wrangler login
 ```
 
 ```bash
-npx wrangler deploy
+npx.cmd wrangler deploy
 ```
 
 ```bash
-npx wrangler secret put X_API_KEY
+npx.cmd wrangler secret put X_API_KEY
 ```
 
 `X_API_SECRET` `X_ACCESS_TOKEN` `X_ACCESS_TOKEN_SECRET` も同じように登録します（4回）。
-登録後、もう一度 `npx wrangler deploy` を実行してください。
+登録後、もう一度 `npx.cmd wrangler deploy` を実行してください。
 
 配置が終わると `https://x-auto-post.<アカウント名>.workers.dev` が使えます。
 ブラウザで開くと**今後2週間の投稿予定**が表示され、Cloudflare が正しく読み取れているか確認できます。
@@ -91,8 +92,8 @@ npx wrangler secret put X_API_KEY
   「自動投稿」から手動投稿できます（Run workflow → dry_run のチェックを外す → force にチェック）。
   いまの時刻に一番近い回が投稿されます
 - **投稿漏れのメールが届いた** → 上の手順で手動投稿してください
-- **Cloudflare の動きを見たい** → `npx wrangler tail`（実行中のログが流れます）
-- **一時的に全部止めたい** → `npx wrangler delete`（復旧は `npx wrangler deploy`）
+- **Cloudflare の動きを見たい** → `npx.cmd wrangler tail`（実行中のログが流れます）
+- **一時的に全部止めたい** → `npx.cmd wrangler delete`（復旧は `npx.cmd wrangler deploy`）
 - **X のクレジット残高** → <https://developer.x.com> の「使用状況」
 
 ## ファイルの説明
