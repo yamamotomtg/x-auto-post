@@ -164,9 +164,12 @@ async function 書き込み権限の確認() {
 
 /** 今このタイミングで投稿すべきものを選ぶ（同じ時刻のものはまとめて返す） */
 export function pickDue(posts) {
+  // 手動実行では、いまの時刻にいちばん近い回を選ぶ（出し忘れた直前の回を出せるように）
   if (FORCE) {
-    const next = posts.find((p) => p.at.getTime() >= Date.now()) ?? posts.at(-1);
-    return next ? posts.filter((p) => p.at.getTime() === next.at.getTime()) : [];
+    const 近い = posts
+      .slice()
+      .sort((a, b) => Math.abs(a.at.getTime() - Date.now()) - Math.abs(b.at.getTime() - Date.now()))[0];
+    return 近い ? posts.filter((p) => p.at.getTime() === 近い.at.getTime()) : [];
   }
   const now = Date.now();
   const candidates = posts.filter(
