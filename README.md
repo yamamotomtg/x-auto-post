@@ -63,9 +63,9 @@ Developer Console でアプリを作り、権限を「読み取りと書き込�
 <https://github.com/yamamotomtg/x-auto-post>（公開）。
 Settings → Secrets に4つのキーを登録済み（投稿漏れの点検で使います）。
 
-### 3. Cloudflare（投稿の実行）
+### 3. Cloudflare（投稿の実行・済み）
 
-<https://dash.cloudflare.com/sign-up> で無料アカウントを作り、このフォルダで次を順に実行します。
+無料アカウントを作り、このフォルダで次を順に実行しました（作り直すときの手順です）。
 （PowerShell では `npx` ではなく **`npx.cmd`** と打ちます。`npx` のままだと「スクリプトの実行が無効」と出ます）
 
 ```bash
@@ -83,7 +83,7 @@ npx.cmd wrangler secret put X_API_KEY
 `X_API_SECRET` `X_ACCESS_TOKEN` `X_ACCESS_TOKEN_SECRET` も同じように登録します（4回）。
 登録後、もう一度 `npx.cmd wrangler deploy` を実行してください。
 
-配置が終わると `https://x-auto-post.<アカウント名>.workers.dev` が使えます。
+設置済みです。確認用ページ: <https://x-auto-post.tokyomtgkaitori.workers.dev>
 ブラウザで開くと**今後2週間の投稿予定**が表示され、Cloudflare が正しく読み取れているか確認できます。
 
 ## 困ったときに
