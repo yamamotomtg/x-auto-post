@@ -103,7 +103,7 @@ npx.cmd wrangler secret put X_API_KEY
 | `schedule.yml` | 登録したお知らせ（画面から書き換えられます） |
 | `images/` | 投稿に添付する画像 |
 | `app/` | 管理画面（サーバーと画面） |
-| `worker.mjs` / `wrangler.toml` | Cloudflare で動く投稿処理 |
+| `worker.mjs` / `wrangler.toml` | Cloudflare で動く投稿処理（投稿した記録は KV に残す） |
 | `rules.mjs` | お知らせの読み取りと、投稿予定の組み立て |
 | `schedule-core.mjs` | 「いま投稿すべきか」「投稿漏れはないか」の判定 |
 | `x-api.mjs` | X API の呼び出し（署名・投稿・画像） |
