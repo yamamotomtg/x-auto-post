@@ -7,8 +7,11 @@ import { parseSchedule, occurrences, addDays, label, jstNow } from './rules.mjs'
 import { 投稿すべきもの, 祝日か } from './schedule-core.mjs';
 import { xClient, キーを読む, XApiError } from './x-api.mjs';
 
-// 同じ回を二度投稿しないための記録（Cloudflare が同じ処理を使い回している間だけ有効）
-const 投稿済み = new Set();
+// 同じ回を二度投稿しないための記録。
+// 下の Set は、Cloudflare が同じ処理を使い回している間しか残りません。
+// 作り直されると空になってしまうため、本命は KV（env.POSTED）への記録です。
+const 覚えた = new Set();
+const 記録の保存期間 = 2 * 24 * 3600; // 秒。2日たてば消えてよい
 // 読み取った schedule.yml を覚えておき、変わっていなければ読み直さない
 let 覚えている = { text: null, rules: [] };
 
@@ -45,37 +48,59 @@ async function 実行(env, now = Date.now()) {
   const today = jstNow(now).date;
   const { posts } = occurrences(rules, addDays(today, -1), addDays(today, 2));
 
-  // 1分ごとに動くので、いまの時刻を過ぎたばかりの回だけを拾う
-  const due = 投稿すべきもの(posts, { 早め: 0, 遅れ上限: 3, now });
+  // 1分ごとに動くので、拾う幅も1分にする。
+  // 幅を広げると同じ回が複数回の実行に引っかかり、そのぶん投稿されてしまう
+  const due = 投稿すべきもの(posts, { 早め: 0, 遅れ上限: 1, now });
   if (!due.length) return;
 
   const x = xClient(キーを読む(env));
   for (const item of due) {
     const 目印 = `${item.投稿日.toISOString().slice(0, 10)} ${item.時刻} ${item.rule.名前}`;
-    if (投稿済み.has(目印)) continue;
+    if (await 済んでいる(env, 目印)) continue;
 
     const 祝日 = await 祝日か(item);
     if (祝日) {
       console.log(`${label(item.対象日)}は${祝日}のため投稿しません（${item.rule.名前}）`);
-      投稿済み.add(目印);
+      await 記録する(env, 目印, '祝日のため見送り');
       continue;
     }
 
-    投稿済み.add(目印); // 投稿の前に記録し、重複して動いても二重投稿しないようにする
+    // 投稿より先に記録する。1分ごとに動くので、記録が遅れると二重投稿になる
+    await 記録する(env, 目印, '投稿中');
     try {
       const 媒体ID = item.画像 ? await x.画像をあげる(await 画像を取る(env, item.画像), item.画像) : null;
       const posted = await x.投稿する(item.本文, 媒体ID);
+      await 記録する(env, 目印, `投稿済み ${posted.id}`);
       console.log(`投稿しました（${item.rule.名前}）: https://x.com/i/status/${posted.id}`);
     } catch (e) {
       if (e instanceof XApiError && e.重複) {
         console.log(`同じ内容がすでに投稿されているため見送りました（${item.rule.名前}）`);
         continue;
       }
-      投稿済み.delete(目印); // 次の実行でやり直せるようにする
+      await 消す(env, 目印); // 次の実行でやり直せるようにする
       console.error(`投稿に失敗しました（${item.rule.名前}）: ${e.message}`);
       throw e;
     }
   }
+}
+
+/** その回をすでに投稿したか（KV が使えないときは、せめて記憶だけで判断する） */
+async function 済んでいる(env, 目印) {
+  if (覚えた.has(目印)) return true;
+  if (!env.POSTED) return false;
+  const 記録 = await env.POSTED.get(目印);
+  if (記録) 覚えた.add(目印);
+  return Boolean(記録);
+}
+
+async function 記録する(env, 目印, 状態) {
+  覚えた.add(目印);
+  if (env.POSTED) await env.POSTED.put(目印, 状態, { expirationTtl: 記録の保存期間 });
+}
+
+async function 消す(env, 目印) {
+  覚えた.delete(目印);
+  if (env.POSTED) await env.POSTED.delete(目印);
 }
 
 async function ルールを取る(env) {

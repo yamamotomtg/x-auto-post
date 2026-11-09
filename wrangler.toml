@@ -15,3 +15,10 @@ IMAGE_BASE = "https://raw.githubusercontent.com/yamamotomtg/x-auto-post/main/ima
 
 [observability]
 enabled = true
+
+# 投稿した回を記録しておく置き場。
+# Cloudflare は処理を使い回したり作り直したりするため、記憶だけに頼ると
+# 同じ回を何度も投稿してしまう（2026/11/8・9 に3回ずつ投稿された原因）。
+[[kv_namespaces]]
+binding = "POSTED"
+id = "0c976f598aff41088c527cc0be8289a8"

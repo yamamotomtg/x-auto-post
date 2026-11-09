@@ -19,7 +19,9 @@ export function 投稿すべきもの(posts, { force = false, 早め = 0, 遅れ
     return posts.filter((p) => p.at.getTime() === 近い.at.getTime());
   }
 
-  const 候補 = posts.filter((p) => p.at.getTime() >= now - 遅れ上限 * 60e3 && p.at.getTime() <= now + 早め * 60e3);
+  // 下限は「より後」で判定する。ちょうど境目を含めてしまうと、1分ごとに動く
+  // Cloudflare で同じ回が2回ぶんの実行に引っかかり、二重投稿になる
+  const 候補 = posts.filter((p) => p.at.getTime() > now - 遅れ上限 * 60e3 && p.at.getTime() <= now + 早め * 60e3);
   if (!候補.length) return [];
   const 最初 = Math.min(...候補.map((p) => p.at.getTime()));
   return 候補.filter((p) => p.at.getTime() === 最初);
