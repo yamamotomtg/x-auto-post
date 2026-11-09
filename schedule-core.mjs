@@ -29,10 +29,18 @@ export function 投稿すべきもの(posts, { force = false, 早め = 0, 遅れ
 
 /**
  * 時間切れで投稿できなかった疑いのある回。
- * 本当に投稿されたかは X に問い合わせて確かめる（呼び出し側の仕事）。
+ * 本当に投稿されたかは、Cloudflare が残した記録で確かめる（呼び出し側の仕事）。
  */
 export function 投稿漏れ(posts, 遅れ上限 = 45, now = Date.now()) {
   return posts.filter((p) => p.at.getTime() < now - 遅れ上限 * 60e3 && p.at.getTime() > now - 12 * 3600e3);
+}
+
+/**
+ * 「どの回か」を表す名札。投稿したかどうかの記録はこの名札で出し入れする。
+ * Cloudflare（投稿する側）と点検する側で同じものを使うため、ここに置いている。
+ */
+export function 記録の目印(item) {
+  return `${item.投稿日.toISOString().slice(0, 10)} ${item.時刻} ${item.rule.名前}`;
 }
 
 /**

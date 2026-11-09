@@ -197,6 +197,7 @@ console.log('\n■ Cloudflare の投稿処理');
       get: async (k) => 中身.get(k) ?? null,
       put: async (k, v) => void 中身.set(k, v),
       delete: async (k) => void 中身.delete(k),
+      list: async () => ({ keys: [...中身.keys()].map((name) => ({ name })) }),
     };
   };
 
@@ -258,6 +259,60 @@ console.log('\n■ Cloudflare の投稿処理');
 
   await test('祝日の月曜は投稿しない（11/23 勤労感謝の日）', async () => {
     assert.equal((await 動かす(at(2026, 11, 23, 11, 0), 置き場())).投稿.length, 0);
+  });
+
+  await test('/records で、投稿した回の記録を読み出せる', async () => {
+    const { default: worker } = await import(`./worker.mjs?${版++}`);
+    const res = await worker.fetch(new Request('https://example.test/records'), { ...env, POSTED: 記録 });
+    assert.deepEqual(await res.json(), { '2026-11-03 10:00 臨時': '投稿済み 12345' });
+  });
+}
+
+// 投稿漏れの点検。Cloudflare が残した記録を見て、出ていない回がないか確かめる。
+console.log('\n■ 投稿漏れの点検');
+{
+  const { 投稿漏れの確認 } = await import('./post.mjs');
+  const 過去の回 = {
+    at: new Date(Date.now() - 2 * 3600e3),
+    投稿日: utcDate(2026, 11, 8),
+    時刻: '20:00',
+    rule: { 名前: '月曜の買取受付（通常）' },
+    本文: '本文',
+  };
+  const 目印 = '2026-11-08 20:00 月曜の買取受付（通常）';
+  const 黙って = async (fn) => {
+    const 本物 = console.log;
+    console.log = () => {};
+    try {
+      return await fn();
+    } finally {
+      console.log = 本物;
+    }
+  };
+
+  await test('記録があれば、投稿漏れなしとする', async () => {
+    await 黙って(() => 投稿漏れの確認([過去の回], async () => ({ [目印]: '投稿済み 999' })));
+  });
+
+  await test('記録がなければ、失敗して知らせる', async () => {
+    await assert.rejects(
+      黙って(() => 投稿漏れの確認([過去の回], async () => ({}))),
+      /1件が投稿されないまま/,
+    );
+  });
+
+  await test('記録を読めないときは、投稿漏れと決めつけない', async () => {
+    await assert.rejects(
+      黙って(() => 投稿漏れの確認([過去の回], async () => { throw new Error('HTTP 500'); })),
+      /HTTP 500/,
+    );
+  });
+
+  await test('まだ時間に余裕がある回は、点検の対象にしない', async () => {
+    const これから = { ...過去の回, at: new Date(Date.now() + 3600e3) };
+    await 黙って(() => 投稿漏れの確認([これから], async () => {
+      throw new Error('記録を読みにいってはいけません');
+    }));
   });
 }
 

@@ -1,6 +1,7 @@
 # 投稿漏れの見張り役。
-# ふだんの投稿は Cloudflare が行うので、ここでは「出ているはずの投稿が X にあるか」だけを
-# 1日2回確かめます。見つからなければ失敗し、GitHub からメールが届きます。
+# ふだんの投稿は Cloudflare が行うので、ここでは「出ているはずの回を Cloudflare が
+# 投稿したという記録があるか」だけを1日2回確かめます。
+# 記録がなければ失敗し、GitHub からメールが届きます。
 # （この点検は数時間ずれても役目を果たすので、GitHub の実行時刻の遅れは問題になりません）
 name: 投稿漏れの点検
 
@@ -24,10 +25,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # X への問い合わせは行わないので、キーは要りません
       - run: node post.mjs
         env:
-          X_API_KEY: ${{ secrets.X_API_KEY }}
-          X_API_SECRET: ${{ secrets.X_API_SECRET }}
-          X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
-          X_ACCESS_TOKEN_SECRET: ${{ secrets.X_ACCESS_TOKEN_SECRET }}
           WATCHDOG: 'true'

@@ -4,7 +4,7 @@
 // 管理画面で編集して「GitHubへ反映」すれば、ここを触らなくても反映されます。
 
 import { parseSchedule, occurrences, addDays, label, jstNow } from './rules.mjs';
-import { 投稿すべきもの, 祝日か } from './schedule-core.mjs';
+import { 投稿すべきもの, 祝日か, 記録の目印 } from './schedule-core.mjs';
 import { xClient, キーを読む, XApiError } from './x-api.mjs';
 
 // 同じ回を二度投稿しないための記録。
@@ -22,6 +22,10 @@ export default {
 
   // ブラウザで開くと、次の投稿予定を確認できる（公開されている内容のみ）
   async fetch(request, env) {
+    // 投稿漏れの点検（GitHub Actions）がここを読み、出たはずの回の記録があるか確かめる
+    if (new URL(request.url).pathname === '/records') {
+      return Response.json(await 記録一覧(env));
+    }
     try {
       const rules = await ルールを取る(env);
       const today = jstNow().date;
@@ -55,7 +59,7 @@ async function 実行(env, now = Date.now()) {
 
   const x = xClient(キーを読む(env));
   for (const item of due) {
-    const 目印 = `${item.投稿日.toISOString().slice(0, 10)} ${item.時刻} ${item.rule.名前}`;
+    const 目印 = 記録の目印(item);
     if (await 済んでいる(env, 目印)) continue;
 
     const 祝日 = await 祝日か(item);
@@ -101,6 +105,14 @@ async function 記録する(env, 目印, 状態) {
 async function 消す(env, 目印) {
   覚えた.delete(目印);
   if (env.POSTED) await env.POSTED.delete(目印);
+}
+
+/** 残っている記録をすべて返す（2日たったものは自動で消えます） */
+async function 記録一覧(env) {
+  if (!env.POSTED) return {};
+  const { keys } = await env.POSTED.list();
+  const 組 = await Promise.all(keys.map(async (k) => [k.name, await env.POSTED.get(k.name)]));
+  return Object.fromEntries(組);
 }
 
 async function ルールを取る(env) {

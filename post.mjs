@@ -10,7 +10,7 @@
 
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
-import { 投稿すべきもの, 祝日か, 投稿漏れ } from './schedule-core.mjs';
+import { 投稿すべきもの, 祝日か, 投稿漏れ, 記録の目印 } from './schedule-core.mjs';
 import { occurrences, addDays, label, jstNow, weightedLength } from './rules.mjs';
 import { loadSchedule } from './schedule-file.mjs';
 import { xClient, キーを読む, XApiError } from './x-api.mjs';
@@ -19,6 +19,8 @@ import { xClient, キーを読む, XApiError } from './x-api.mjs';
 export const LEAD_MINUTES = 10;
 // 起動が遅れた場合、何分後まで投稿するか
 export const LATE_LIMIT_MINUTES = 45;
+// 投稿を実行している Cloudflare。投稿漏れの点検で、その記録を読む
+export const WORKER_URL = 'https://x-auto-post.tokyomtgkaitori.workers.dev';
 
 const DRY_RUN = process.env.DRY_RUN === 'true';
 const FORCE = process.env.FORCE === 'true';
@@ -34,7 +36,7 @@ async function main() {
   if (MEDIA_TEST) return await 書き込み権限の確認();
   if (WATCHDOG) return await 投稿漏れの確認(posts);
 
-  const due = 投稿すべきもの(posts, { force: FORCE, lead: LEAD_MINUTES, late: LATE_LIMIT_MINUTES });
+  const due = 投稿すべきもの(posts, { force: FORCE, 早め: LEAD_MINUTES, 遅れ上限: LATE_LIMIT_MINUTES });
   if (!due.length) {
     const next = posts.find((p) => p.at.getTime() > Date.now());
     console.log('いま投稿するものはありません。' + (next ? `次の予定: ${label(next.投稿日)} ${next.時刻}（${next.rule.名前}）` : ''));
@@ -99,27 +101,41 @@ function 画像を読む(名前) {
 /**
  * 投稿できなかった回がないか確かめ、見つかれば失敗として終える
  * （GitHub からメールが届き、気づけるようにするため）。
+ *
+ * 以前は X の投稿一覧と本文を突き合わせていたが、画像つきの投稿は本文の末尾に
+ * 画像のリンクが付くため一致せず、投稿できていても「漏れ」と報告していた。
+ * いまは Cloudflare が残した記録を見る（X への問い合わせは行わない）。
  */
-async function 投稿漏れの確認(posts) {
+export async function 投稿漏れの確認(posts, 記録を取る = 記録を読む) {
   const 疑い = 投稿漏れ(posts, LATE_LIMIT_MINUTES);
   if (!疑い.length) {
     console.log('投稿漏れはありません。');
     return;
   }
 
-  const x = client();
-  const 投稿済み = await x.最近の投稿((await x.me()).data.id);
-  const 漏れ = 疑い.filter((p) => !投稿済み.has(p.本文.trim()));
+  const 記録 = await 記録を取る();
+  const 漏れ = 疑い.filter((p) => !記録[記録の目印(p)]);
+  for (const p of 疑い) {
+    const 状態 = 記録[記録の目印(p)];
+    console.log(`${label(p.投稿日)} ${p.時刻}（${p.rule.名前}）… ${状態 ?? '記録なし'}`);
+  }
   if (!漏れ.length) {
     console.log(`過去${疑い.length}件の予定は、すべて投稿済みでした。`);
     return;
   }
 
-  for (const p of 漏れ) console.error(`投稿されていません: ${label(p.投稿日)} ${p.時刻}（${p.rule.名前}）`);
   throw new Error(
     `${漏れ.length}件が投稿されないまま時間切れになりました。` +
       'Run workflow（force にチェック）で手動投稿できます。',
   );
+}
+
+/** Cloudflare が残した「どの回を投稿したか」の記録 */
+async function 記録を読む() {
+  const url = process.env.RECORDS_URL || `${WORKER_URL}/records`;
+  const res = await fetch(url, { signal: AbortSignal.timeout(30e3) });
+  if (!res.ok) throw new Error(`Cloudflare の記録を読み取れません（HTTP ${res.status}）: ${url}`);
+  return await res.json();
 }
 
 /**

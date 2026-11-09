@@ -68,13 +68,6 @@ export function xClient(keys) {
     /** ログインしているアカウント */
     me: () => call('GET', ME_URL),
 
-    /** 直近の自分の投稿の本文 */
-    async 最近の投稿(userId) {
-      const url = `https://api.x.com/2/users/${userId}/tweets?max_results=10&exclude=replies,retweets`;
-      const res = await call('GET', url);
-      return new Set((res.data ?? []).map((t) => t.text.trim()));
-    },
-
     /** 画像をアップロードして媒体IDを返す（この時点では公開されない） */
     async 画像をあげる(バイト列, ファイル名) {
       const form = new FormData();
